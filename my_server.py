@@ -42,6 +42,7 @@ def _row_to_dict(row) -> dict:
         "carbs_g": row[4],
         "fat_g": row[5],
         "logged_at": datetime.fromisoformat(row[6]).astimezone(NYC).isoformat(),
+        "desc": row[7],
     }
 
 
@@ -88,14 +89,15 @@ def log_meal(
     carbs_g: Annotated[Optional[float], "Carbs in grams"] = None,
     fat_g: Annotated[Optional[float], "Fat in grams"] = None,
     logged_at: Annotated[Optional[str], "ISO timestamp (UTC). Defaults to now."] = None,
+    desc: Annotated[Optional[str], "Description of the meal"] = None,
 ) -> str:
     """Log a meal to the database."""
     if logged_at is None:
         logged_at = datetime.now(pytz.utc).isoformat()
     conn = get_db()
     conn.execute(
-        "INSERT INTO meals (meal_type, calories, protein_g, carbs_g, fat_g, logged_at) VALUES (?, ?, ?, ?, ?, ?)",
-        (meal_type, calories, protein_g, carbs_g, fat_g, logged_at),
+        "INSERT INTO meals (meal_type, calories, protein_g, carbs_g, fat_g, logged_at, desc) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (meal_type, calories, protein_g, carbs_g, fat_g, logged_at, desc or ""),
     )
     conn.commit()
     row = conn.execute(
@@ -116,6 +118,7 @@ def update_meal(
     carbs_g: Annotated[Optional[float], "Carbs in grams"] = None,
     fat_g: Annotated[Optional[float], "Fat in grams"] = None,
     logged_at: Annotated[Optional[str], "ISO timestamp (UTC)"] = None,
+    desc: Annotated[Optional[str], "Description of the meal"] = None,
 ) -> str:
     """Update fields of an existing meal by ID."""
     fields = {
@@ -125,6 +128,7 @@ def update_meal(
         "carbs_g": carbs_g,
         "fat_g": fat_g,
         "logged_at": logged_at,
+        "desc": desc,
     }
     updates = {k: v for k, v in fields.items() if v is not None}
     if not updates:
