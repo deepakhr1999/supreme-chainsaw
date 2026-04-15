@@ -26,13 +26,14 @@ def _nyc_day_to_utc_range(date_str: str) -> tuple[str, str]:
     Returns ISO strings with +00:00 suffix to match stored timestamps."""
     day_start = NYC.localize(datetime.strptime(date_str, "%Y-%m-%d"))
     day_end = day_start + timedelta(days=1)
-    fmt = "%Y-%m-%dT%H:%M:%S+00:00"
-    return day_start.astimezone(pytz.utc).strftime(fmt), day_end.astimezone(
-        pytz.utc
-    ).strftime(fmt)
+    return (
+        day_start.astimezone(pytz.utc).isoformat(),
+        day_end.astimezone(pytz.utc).isoformat(),
+    )
 
 
 def _row_to_dict(row) -> dict:
+    # used only while returning existing data to user
     return {
         "id": row[0],
         "meal_type": row[1],
@@ -40,7 +41,7 @@ def _row_to_dict(row) -> dict:
         "protein_g": row[3],
         "carbs_g": row[4],
         "fat_g": row[5],
-        "logged_at": row[6],
+        "logged_at": datetime.fromisoformat(row[6]).astimezone(NYC).isoformat(),
     }
 
 
@@ -90,7 +91,7 @@ def log_meal(
 ) -> str:
     """Log a meal to the database."""
     if logged_at is None:
-        logged_at = datetime.now(pytz.utc).strftime("%Y-%m-%dT%H:%M:%S")
+        logged_at = datetime.now(pytz.utc).isoformat()
     conn = get_db()
     conn.execute(
         "INSERT INTO meals (meal_type, calories, protein_g, carbs_g, fat_g, logged_at) VALUES (?, ?, ?, ?, ?, ?)",
