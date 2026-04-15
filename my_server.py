@@ -15,6 +15,8 @@ NYC = pytz.timezone("America/New_York")
 def get_db(sync: bool = False):
     url = os.environ.get("TURSO_DATABASE_URL", "")
     token = os.environ.get("TURSO_AUTH_TOKEN", "")
+    print("URL:", url)
+    print("len(token)=", len(token))
     conn = libsql.connect("nutrition.db", sync_url=url, auth_token=token)
     if sync:
         conn.sync()
@@ -27,7 +29,9 @@ def _nyc_day_to_utc_range(date_str: str) -> tuple[str, str]:
     day_start = NYC.localize(datetime.strptime(date_str, "%Y-%m-%d"))
     day_end = day_start + timedelta(days=1)
     fmt = "%Y-%m-%dT%H:%M:%S+00:00"
-    return day_start.astimezone(pytz.utc).strftime(fmt), day_end.astimezone(pytz.utc).strftime(fmt)
+    return day_start.astimezone(pytz.utc).strftime(fmt), day_end.astimezone(
+        pytz.utc
+    ).strftime(fmt)
 
 
 def _row_to_dict(row) -> dict:
@@ -207,7 +211,9 @@ def get_nutrition_summary(
     by_date: dict = {}
     for m in meals:
         logged_at_str = m["logged_at"].replace("+00:00", "").split(".")[0]
-        utc_dt = datetime.strptime(logged_at_str, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=pytz.utc)
+        utc_dt = datetime.strptime(logged_at_str, "%Y-%m-%dT%H:%M:%S").replace(
+            tzinfo=pytz.utc
+        )
         nyc_date = utc_dt.astimezone(NYC).strftime("%Y-%m-%d")
         if nyc_date not in by_date:
             by_date[nyc_date] = {
