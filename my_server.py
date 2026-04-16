@@ -136,7 +136,7 @@ def update_meal(
     set_clause = ", ".join(f"{k} = ?" for k in updates)
     values = list(updates.values()) + [meal_id]
     conn = get_db()
-    conn.execute(f"UPDATE meals SET {set_clause} WHERE id = ?", values)
+    conn.execute(f"UPDATE meals SET {set_clause} WHERE id = ?", tuple(values))
     conn.commit()
     row = conn.execute("SELECT * FROM meals WHERE id = ?", (meal_id,)).fetchone()
     if row is None:
