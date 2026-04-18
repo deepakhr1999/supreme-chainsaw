@@ -3,7 +3,7 @@ from typing import Annotated, Optional
 import json
 import os
 import requests
-import libsql_experimental as libsql
+import libsql  # type: ignore
 from datetime import datetime, timedelta
 import pytz
 
@@ -213,11 +213,10 @@ def get_nutrition_summary(
     # Group by NYC date
     by_date: dict = {}
     for m in meals:
-        logged_at_str = m["logged_at"].replace("+00:00", "").split(".")[0]
-        utc_dt = datetime.strptime(logged_at_str, "%Y-%m-%dT%H:%M:%S").replace(
-            tzinfo=pytz.utc
+        logged_at_str = m["logged_at"]
+        nyc_date = (
+            datetime.fromisoformat(logged_at_str).astimezone(NYC).strftime("%Y-%m-%d")
         )
-        nyc_date = utc_dt.astimezone(NYC).strftime("%Y-%m-%d")
         if nyc_date not in by_date:
             by_date[nyc_date] = {
                 "calories": 0.0,
@@ -250,6 +249,128 @@ def get_nutrition_summary(
             "daily_averages": averages,
         }
     )
+
+
+def _template_row_to_dict(row) -> dict:
+    return {
+        "id": row[0],
+        "name": row[1],
+        "calories": row[2],
+        "protein_g": row[3],
+        "carbs_g": row[4],
+        "fat_g": row[5],
+        "notes": row[6],
+    }
+
+
+@mcp.tool
+def create_meal_template(
+    name: Annotated[str, "Name of the meal template"],
+    calories: Annotated[Optional[float], "Calories"] = None,
+    protein_g: Annotated[Optional[float], "Protein in grams"] = None,
+    carbs_g: Annotated[Optional[float], "Carbs in grams"] = None,
+    fat_g: Annotated[Optional[float], "Fat in grams"] = None,
+    notes: Annotated[Optional[str], "Notes about the template"] = None,
+) -> str:
+    """Create a new meal template."""
+    conn = get_db()
+    conn.execute(
+        "INSERT INTO meal_templates (name, calories, protein_g, carbs_g, fat_g, notes) VALUES (?, ?, ?, ?, ?, ?)",
+        (name, calories, protein_g, carbs_g, fat_g, notes or ""),
+    )
+    conn.commit()
+    row = conn.execute(
+        "SELECT * FROM meal_templates WHERE name = ? ORDER BY rowid DESC LIMIT 1",
+        (name,),
+    ).fetchone()
+    return json.dumps(_template_row_to_dict(row))
+
+
+@mcp.tool
+def update_meal_template(
+    template_id: Annotated[str, "ID of the template to update"],
+    name: Annotated[Optional[str], "Name of the meal template"] = None,
+    calories: Annotated[Optional[float], "Calories"] = None,
+    protein_g: Annotated[Optional[float], "Protein in grams"] = None,
+    carbs_g: Annotated[Optional[float], "Carbs in grams"] = None,
+    fat_g: Annotated[Optional[float], "Fat in grams"] = None,
+    notes: Annotated[Optional[str], "Notes about the template"] = None,
+) -> str:
+    """Update fields of an existing meal template by ID."""
+    fields = {
+        "name": name,
+        "calories": calories,
+        "protein_g": protein_g,
+        "carbs_g": carbs_g,
+        "fat_g": fat_g,
+        "notes": notes,
+    }
+    updates = {k: v for k, v in fields.items() if v is not None}
+    if not updates:
+        return "No fields provided to update."
+    set_clause = ", ".join(f"{k} = ?" for k in updates)
+    values = list(updates.values()) + [template_id]
+    conn = get_db()
+    conn.execute(f"UPDATE meal_templates SET {set_clause} WHERE id = ?", tuple(values))
+    conn.commit()
+    row = conn.execute(
+        "SELECT * FROM meal_templates WHERE id = ?", (template_id,)
+    ).fetchone()
+    if row is None:
+        return f"No meal template found with id {template_id}"
+    return json.dumps(_template_row_to_dict(row))
+
+
+@mcp.tool
+def delete_meal_template(
+    template_id: Annotated[str, "ID of the template to delete"],
+) -> str:
+    """Delete a meal template by ID."""
+    conn = get_db()
+    row = conn.execute(
+        "SELECT id FROM meal_templates WHERE id = ?", (template_id,)
+    ).fetchone()
+    if row is None:
+        return f"No meal template found with id {template_id}"
+    conn.execute("DELETE FROM meal_templates WHERE id = ?", (template_id,))
+    conn.commit()
+    return f"Deleted meal template {template_id}"
+
+
+@mcp.tool
+def log_meal_from_template(
+    template_id: Annotated[str, "ID of the meal template to log"],
+    meal_type: Annotated[str, "One of: breakfast, lunch, dinner, snack"],
+    logged_at: Annotated[Optional[str], "ISO timestamp (UTC). Defaults to now."] = None,
+) -> str:
+    """Log a meal using macros from a saved template."""
+    conn = get_db(sync=True)
+    row = conn.execute(
+        "SELECT * FROM meal_templates WHERE id = ?", (template_id,)
+    ).fetchone()
+    if row is None:
+        return f"No meal template found with id {template_id}"
+    t = _template_row_to_dict(row)
+    if logged_at is None:
+        logged_at = datetime.now(pytz.utc).isoformat()
+    conn.execute(
+        "INSERT INTO meals (meal_type, calories, protein_g, carbs_g, fat_g, logged_at, desc) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (
+            meal_type,
+            t["calories"],
+            t["protein_g"],
+            t["carbs_g"],
+            t["fat_g"],
+            logged_at,
+            t["name"],
+        ),
+    )
+    conn.commit()
+    meal_row = conn.execute(
+        "SELECT * FROM meals WHERE logged_at = ? AND meal_type = ? ORDER BY rowid DESC LIMIT 1",
+        (logged_at, meal_type),
+    ).fetchone()
+    return json.dumps(_row_to_dict(meal_row))
 
 
 if __name__ == "__main__":
