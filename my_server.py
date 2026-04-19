@@ -1,11 +1,12 @@
-from fastmcp import FastMCP
-from typing import Annotated, Optional
-import json
 import os
+import json
 import requests
-import libsql  # type: ignore
+from typing import Annotated, Optional
 from datetime import datetime, timedelta
 import pytz
+import pandas as pd
+import libsql  # type: ignore
+from fastmcp import FastMCP
 
 mcp = FastMCP("Hevy MCP Server")
 
@@ -170,6 +171,16 @@ def get_meals_by_date(
         (start_utc, end_utc),
     ).fetchall()
     return json.dumps([_row_to_dict(r) for r in rows])
+
+
+@mcp.tool
+def list_templates() -> str:
+    """Get all meals logged on a specific NYC calendar date."""
+    conn = get_db(sync=True)
+    rows = pd.read_sql("select id, name, notes from meal_templates", con=conn).to_json(
+        orient="records"
+    )
+    return rows
 
 
 @mcp.tool
