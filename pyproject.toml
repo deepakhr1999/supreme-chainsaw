@@ -118,4 +118,5 @@ dev = [
     "mypy-extensions==1.0.0",
     "types-requests>=2.33.0.20260408",
     "types-pytz>=2026.1.1.20260408",
+    "pandas-stubs>=3.0.0.260204",
 ]
